@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Read Aloud: Speed, Pause, Auto-Read
 // @namespace    https://github.com/opendaniil
-// @version      4.11
+// @version      4.14
 // @description  Adds compact controls for ChatGPT Read Aloud: realtime speed, play/pause, Space shortcut, and per-chat auto-read.
 // @icon         https://chatgpt.com/favicon.ico
 // @match        https://chatgpt.com/*
@@ -22,7 +22,7 @@
    **************************************************************************/
 
   const MIN_SPEED = 0.5
-  const MAX_SPEED = 16
+  const MAX_SPEED = 4
   const SPEED_STEP = 0.25
 
   const SPEED_STORAGE_KEY = 'chatgptReadAloudComposerSpeedMvp'
@@ -33,6 +33,7 @@
   const WATCHDOG_INTERVAL_MS = 500
   const POLL_INTERVAL = 600
   const READ_DELAY = 1000
+  const READ_ALOUD_EXPECTATION_MS = 10000
 
   /**************************************************************************
    * State
@@ -45,9 +46,11 @@
   let autoReadObserver = null
   let routeObserver = null
   let ignoreRateChange = false
+  let activeAudioSession = false
   let hasSeenPlayableAudio = false
   let isAudioLoading = false
   let keyboardShortcutsInstalled = false
+  let readAloudClickListenerInstalled = false
 
   let loadingDotsTimer = null
   let loadingDotsCount = 1
@@ -56,6 +59,7 @@
   let lastReadMsgId = null
   let waitTimer = null
   let lastUrl = location.href
+  let readAloudExpectedUntil = 0
 
   let container = null
   let playerGroup = null
@@ -166,6 +170,14 @@
     return Array.from(document.querySelectorAll('audio')).filter(isRealAudio)
   }
 
+  function expectReadAloudAudio() {
+    readAloudExpectedUntil = Date.now() + READ_ALOUD_EXPECTATION_MS
+  }
+
+  function isReadAloudAudioExpected() {
+    return Date.now() <= readAloudExpectedUntil
+  }
+
   function isAudioStillUsable(audio) {
     if (!isRealAudio(audio)) return false
 
@@ -175,6 +187,8 @@
   }
 
   function getBestAudioCandidate() {
+    if (!activeAudioSession) return null
+
     const audios = getAllAudioElements()
 
     if (currentAudio && audios.includes(currentAudio) && hasSeenPlayableAudio) {
@@ -192,6 +206,7 @@
 
   function refreshCurrentAudioIfNeeded() {
     if (
+      activeAudioSession &&
       currentAudio &&
       isAudioStillUsable(currentAudio) &&
       hasSeenPlayableAudio
@@ -302,10 +317,13 @@
     'play',
     (event) => {
       if (!isRealAudio(event.target)) return
+      if (!activeAudioSession && !isReadAloudAudioExpected()) return
 
+      activeAudioSession = true
       hasSeenPlayableAudio = true
       isAudioLoading = true
       currentAudio = event.target
+      readAloudExpectedUntil = 0
 
       // Full scan on play, because ChatGPT may create/swap audio elements here.
       forceSpeedOnAllAudio()
@@ -380,7 +398,12 @@
       if (!isRealAudio(event.target)) return
 
       if (event.target === currentAudio) {
+        activeAudioSession = false
         isAudioLoading = false
+        hasSeenPlayableAudio = false
+        currentAudio = null
+        readAloudExpectedUntil = 0
+        stopLoadingDots()
         updateUI()
       }
     },
@@ -508,6 +531,34 @@
     'button[aria-label="朗读"]',
   ]
 
+  function getReadAloudControl(target) {
+    if (!(target instanceof Element)) return null
+
+    for (const selector of READ_SELECTORS) {
+      const el = target.closest(selector)
+
+      if (el && isVisible(el)) return el
+    }
+
+    return null
+  }
+
+  function setupReadAloudClickExpectation() {
+    if (readAloudClickListenerInstalled) return
+
+    readAloudClickListenerInstalled = true
+
+    document.addEventListener(
+      'click',
+      (event) => {
+        if (getReadAloudControl(event.target)) {
+          expectReadAloudAudio()
+        }
+      },
+      true,
+    )
+  }
+
   function simulateClick(el) {
     const rect = el.getBoundingClientRect()
     const cx = Math.round((rect.left + rect.right) / 2)
@@ -589,9 +640,8 @@
 
       if (el && isVisible(el)) {
         log('auto read click', selector)
+        expectReadAloudAudio()
         el.click()
-        isAudioLoading = true
-        updateUI()
         return true
       }
     }
@@ -601,9 +651,6 @@
 
   async function triggerReadAloud(msgEl) {
     if (!msgEl) return
-
-    isAudioLoading = true
-    updateUI()
 
     msgEl.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
     await sleep(500)
@@ -708,14 +755,18 @@
   function setupAutoReadObserver() {
     if (autoReadObserver || !document.body) return
 
-    let lastMsg = getLastAssistantMsg()
+    const lastMsg = getLastAssistantMsg()
+    let lastMsgId = lastMsg ? getMsgId(lastMsg) : null
 
     autoReadObserver = new MutationObserver(() => {
       const currentMsg = getLastAssistantMsg()
+      const currentMsgId = currentMsg ? getMsgId(currentMsg) : null
 
-      if (currentMsg && currentMsg !== lastMsg) {
-        lastMsg = currentMsg
+      if (currentMsg && currentMsgId !== lastMsgId) {
+        lastMsgId = currentMsgId
         onNewMessage(currentMsg)
+      } else if (!currentMsg) {
+        lastMsgId = null
       }
     })
 
@@ -733,9 +784,11 @@
 
       lastUrl = location.href
       lastReadMsgId = null
+      activeAudioSession = false
       isAudioLoading = false
       hasSeenPlayableAudio = false
       currentAudio = null
+      readAloudExpectedUntil = 0
 
       stopLoadingDots()
 
@@ -779,10 +832,9 @@
    **************************************************************************/
 
   function getPlayerState(audio) {
-    if (isAudioLoading) return 'loading'
-    if (!audio || !hasSeenPlayableAudio) return 'idle'
+    if (!activeAudioSession || !audio || !hasSeenPlayableAudio) return 'idle'
     if (audio.ended) return 'ended'
-    if (audio.currentTime <= 0) return 'loading'
+    if (isAudioLoading) return 'loading'
     if (audio.paused) return 'paused'
     return 'playing'
   }
@@ -983,6 +1035,7 @@
 
     setupAutoReadObserver()
     setupRouteObserver()
+    setupReadAloudClickExpectation()
     setupKeyboardShortcuts()
 
     startWatchdog()
