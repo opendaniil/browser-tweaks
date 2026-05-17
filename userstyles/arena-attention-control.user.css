@@ -12,44 +12,44 @@
 ==/UserStyle== */
 
 @-moz-document domain("arena.ai") {
-	/**************************************************************************
-	 * Sidebar attention control
-	 **************************************************************************/
+  /**************************************************************************
+   * Sidebar attention control
+   **************************************************************************/
 
-	[data-sidebar="sidebar"] {
-		filter: blur(8px);
-		opacity: 0.3;
-	}
+  [data-sidebar="sidebar"] {
+    filter: blur(8px);
+    opacity: 0.3;
+  }
 
-	[data-sidebar="sidebar"]:hover {
-		filter: blur(0);
-		opacity: 0.5;
-	}
+  [data-sidebar="sidebar"]:hover {
+    filter: blur(0);
+    opacity: 0.5;
+  }
 
-	[data-sidebar="footer"] [data-sidebar="menu"] {
-		filter: blur(4px);
-		opacity: 0.5;
-	}
+  [data-sidebar="footer"] [data-sidebar="menu"] {
+    filter: blur(4px);
+    opacity: 0.5;
+  }
 
-	[data-sidebar="footer"] [data-sidebar="menu"]:hover {
-		filter: blur(0);
-		opacity: 0.8;
-	}
+  [data-sidebar="footer"] [data-sidebar="menu"]:hover {
+    filter: blur(0);
+    opacity: 0.8;
+  }
 
-	/**************************************************************************
-	 * Hide secondary text
-	 **************************************************************************/
+  /**************************************************************************
+   * Hide secondary text
+   **************************************************************************/
 
-	p.text-text-secondary,
-	.text-text-muted {
-		visibility: hidden;
-	}
+  p.text-text-secondary,
+  .text-text-muted {
+    visibility: hidden;
+  }
 
-	/**************************************************************************
-	 * Hide page heading
-	 **************************************************************************/
+  /**************************************************************************
+   * Hide page heading
+   **************************************************************************/
 
-	h1 {
-		display: none;
-	}
+  h1 {
+    display: none;
+  }
 }

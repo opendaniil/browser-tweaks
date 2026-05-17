@@ -15,33 +15,33 @@
 // @updateURL    https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userscripts/zen-browser-compact-mode-shortcut-priority.user.js
 // ==/UserScript==
 
-(() => {
-	const KEY_CODE = "KeyS";
+;(() => {
+  const KEY_CODE = 'KeyS'
 
-	function isCompactModeShortcut(event) {
-		const isSaveKey =
-			event.code === KEY_CODE || event.key?.toLowerCase() === "s";
+  function isCompactModeShortcut(event) {
+    const isSaveKey =
+      event.code === KEY_CODE || event.key?.toLowerCase() === 's'
 
-		const usesPrimaryModifier = event.metaKey || event.ctrlKey;
-		const hasExtraModifiers = event.altKey || event.shiftKey;
+    const usesPrimaryModifier = event.metaKey || event.ctrlKey
+    const hasExtraModifiers = event.altKey || event.shiftKey
 
-		return isSaveKey && usesPrimaryModifier && !hasExtraModifiers;
-	}
+    return isSaveKey && usesPrimaryModifier && !hasExtraModifiers
+  }
 
-	window.addEventListener(
-		"keydown",
-		function preserveBrowserCompactModeShortcut(event) {
-			if (!isCompactModeShortcut(event)) {
-				return;
-			}
+  window.addEventListener(
+    'keydown',
+    function preserveBrowserCompactModeShortcut(event) {
+      if (!isCompactModeShortcut(event)) {
+        return
+      }
 
-			// Do not call preventDefault().
-			// We only stop website handlers so the browser can still handle Cmd+S / Ctrl+S.
-			event.stopImmediatePropagation();
-			event.stopPropagation();
+      // Do not call preventDefault().
+      // We only stop website handlers so the browser can still handle Cmd+S / Ctrl+S.
+      event.stopImmediatePropagation()
+      event.stopPropagation()
 
-			console.debug("[userscript] Preserved browser compact mode shortcut");
-		},
-		true,
-	);
-})();
+      console.debug('[userscript] Preserved browser compact mode shortcut')
+    },
+    true,
+  )
+})()
