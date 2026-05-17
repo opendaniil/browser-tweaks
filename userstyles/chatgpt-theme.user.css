@@ -1,0 +1,54 @@
+/* ==UserStyle==
+@name           ChatGPT Theme
+@namespace      github.com/opendaniil/browser-tweaks
+@version        1.0.0
+@description    ChatGPT layout and surfaces: right sidebar, softer dark background, transparent bubbles, and blurred composer.
+@author         opendaniil
+@license        MIT
+@preprocessor   default
+@homepageURL    https://github.com/opendaniil/browser-tweaks
+@supportURL     https://github.com/opendaniil/browser-tweaks/issues
+@updateURL      https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userstyles/chatgpt-theme.user.css
+==/UserStyle== */
+
+@-moz-document domain("chatgpt.com") {
+	/**************************************************************************
+	 * Layout
+	 **************************************************************************/
+
+	#stage-slideover-sidebar {
+		order: 2;
+	}
+
+	#sidebar-header {
+		flex-direction: row-reverse;
+	}
+
+	/**************************************************************************
+	 * Surface theme
+	 **************************************************************************/
+
+	.dark {
+		--sidebar-surface-primary: #272a36 !important;
+		--bg-secondary-surface: #272a36 !important;
+		--main-surface-primary: #272a36 !important;
+		--bg-primary: #272a36 !important;
+	}
+
+	[data-writing-block="true"],
+	.bg-token-bg-elevated-secondary,
+	[data-testid="writing-block-header-surface"],
+	.user-message-bubble-color {
+		background-color: transparent;
+	}
+
+	.composer-submit-button-color {
+		background-color: gray;
+	}
+
+	[data-composer-surface="true"] {
+		backdrop-filter: blur(4px) !important;
+		background-color: transparent;
+		box-shadow: none !important;
+	}
+}
