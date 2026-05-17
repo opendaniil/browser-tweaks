@@ -3,6 +3,7 @@
 // @namespace    https://github.com/opendaniil
 // @version      2.4.0
 // @description  Alt+D starts/stops ChatGPT dictation and optionally auto-sends when the Send button becomes available.
+// @icon         https://chatgpt.com/favicon.ico
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
 // @grant        none

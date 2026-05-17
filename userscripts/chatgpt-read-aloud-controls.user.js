@@ -3,6 +3,7 @@
 // @namespace    https://github.com/opendaniil
 // @version      4.11
 // @description  Adds compact controls for ChatGPT Read Aloud: realtime speed, play/pause, Space shortcut, and per-chat auto-read.
+// @icon         https://chatgpt.com/favicon.ico
 // @match        https://chatgpt.com/*
 // @match        https://*.chatgpt.com/*
 // @match        https://chat.openai.com/*

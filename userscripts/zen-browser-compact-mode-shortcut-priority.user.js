@@ -3,6 +3,7 @@
 // @namespace    https://github.com/opendaniil
 // @version      1.0.0
 // @description  Prevents websites from handling Cmd+S / Ctrl+S so Zen Browser can use it for Toggle Compact Mode.
+// @icon         https://zen-browser.app/favicon.ico
 // @match        *://*/*
 // @grant        none
 // @run-at       document-start
