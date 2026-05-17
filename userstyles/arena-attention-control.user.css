@@ -1,0 +1,55 @@
+/* ==UserStyle==
+@name           Arena Attention Control
+@namespace      github.com/opendaniil/browser-tweaks
+@version        1.0.0
+@description    Reduces Arena visual noise with sidebar blur, opacity, and hidden secondary text.
+@author         opendaniil
+@license        MIT
+@preprocessor   default
+@homepageURL    https://github.com/opendaniil/browser-tweaks
+@supportURL     https://github.com/opendaniil/browser-tweaks/issues
+@updateURL      https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userstyles/arena-attention-control.user.css
+==/UserStyle== */
+
+@-moz-document domain("arena.ai") {
+	/**************************************************************************
+	 * Sidebar attention control
+	 **************************************************************************/
+
+	[data-sidebar="sidebar"] {
+		filter: blur(8px);
+		opacity: 0.3;
+	}
+
+	[data-sidebar="sidebar"]:hover {
+		filter: blur(0);
+		opacity: 0.5;
+	}
+
+	[data-sidebar="footer"] [data-sidebar="menu"] {
+		filter: blur(4px);
+		opacity: 0.5;
+	}
+
+	[data-sidebar="footer"] [data-sidebar="menu"]:hover {
+		filter: blur(0);
+		opacity: 0.8;
+	}
+
+	/**************************************************************************
+	 * Hide secondary text
+	 **************************************************************************/
+
+	p.text-text-secondary,
+	.text-text-muted {
+		visibility: hidden;
+	}
+
+	/**************************************************************************
+	 * Hide page heading
+	 **************************************************************************/
+
+	h1 {
+		display: none;
+	}
+}
