@@ -1,0 +1,112 @@
+/* ==UserStyle==
+@name           ChatGPT Attention Control
+@namespace      github.com/opendaniil/browser-tweaks
+@version        1.0.0
+@description    Reduces ChatGPT visual noise with blur, opacity, hover reveal, and hidden distractions.
+@author         opendaniil
+@license        MIT
+@preprocessor   default
+@homepageURL    https://github.com/opendaniil/browser-tweaks
+@supportURL     https://github.com/opendaniil/browser-tweaks/issues
+@updateURL      https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userstyles/chatgpt-attention-control.user.css
+==/UserStyle== */
+
+@-moz-document domain("chatgpt.com") {
+	/**************************************************************************
+	 * Shared transitions
+	 **************************************************************************/
+
+	#page-header,
+	[aria-label="Home"],
+	[aria-label="Chat history"],
+	#stage-slideover-sidebar,
+	[data-testid="accounts-profile-button"],
+	.\[grid-area\:leading\],
+	.\[grid-area\:trailing\],
+	[aria-label="Response actions"] {
+		transition:
+			opacity 180ms ease,
+			filter 180ms ease;
+	}
+
+	/**************************************************************************
+	 * Header / navigation dimming
+	 **************************************************************************/
+
+	#page-header {
+		opacity: 0.2;
+	}
+
+	#page-header:hover {
+		opacity: 0.8;
+	}
+
+	[aria-label="Home"] {
+		opacity: 0.3;
+	}
+
+	#thread-bottom + div {
+		display: none;
+	}
+
+	/**************************************************************************
+	 * Sidebar attention control
+	 **************************************************************************/
+
+	[aria-label="Chat history"],
+	#stage-slideover-sidebar {
+		filter: blur(6px);
+		opacity: 0.3;
+	}
+
+	[aria-label="Chat history"]:hover,
+	#stage-slideover-sidebar:hover {
+		filter: blur(0);
+		opacity: 0.8;
+	}
+
+	/**************************************************************************
+	 * Account / profile dimming
+	 **************************************************************************/
+
+	[data-testid="accounts-profile-button"] {
+		filter: blur(4px);
+		opacity: 0.2;
+	}
+
+	[data-testid="accounts-profile-button"]:hover {
+		filter: blur(0);
+		opacity: 0.8;
+	}
+
+	/**************************************************************************
+	 * Hide splash / disclaimers
+	 **************************************************************************/
+
+	[style*="--vt-splash-screen-headline"],
+	[class*="--vt-disclaimer"] {
+		visibility: hidden;
+	}
+
+	/**************************************************************************
+	 * Message controls dimming
+	 **************************************************************************/
+
+	.\[grid-area\:leading\],
+	.\[grid-area\:trailing\] {
+		opacity: 0.2;
+	}
+
+	.\[grid-area\:leading\]:hover,
+	.\[grid-area\:trailing\]:hover {
+		opacity: 0.6;
+	}
+
+	[aria-label="Response actions"] {
+		opacity: 0.2;
+	}
+
+	[aria-label="Response actions"]:hover {
+		opacity: 0.8;
+	}
+}
