@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT Read Aloud: Speed, Pause, Auto-Read
 // @namespace    https://github.com/opendaniil
-// @version      4.14
+// @version      4.15
 // @description  Adds compact controls for ChatGPT Read Aloud: realtime speed, play/pause, Space shortcut, and per-chat auto-read.
 // @icon         https://chatgpt.com/favicon.ico
 // @match        https://chatgpt.com/*
@@ -34,6 +34,8 @@
   const POLL_INTERVAL = 600
   const READ_DELAY = 1000
   const READ_ALOUD_EXPECTATION_MS = 10000
+  const PROVISIONAL_AUDIO_TIMEOUT_MS = 3000
+  const DEBUG_AUDIO_SESSION = false
 
   /**************************************************************************
    * State
@@ -51,6 +53,10 @@
   let isAudioLoading = false
   let keyboardShortcutsInstalled = false
   let readAloudClickListenerInstalled = false
+  let provisionalAudioTimer = null
+  let audioDebugPlayStartedAt = 0
+  let audioDebugLoggedProgress = false
+  let lastDebugUiState = null
 
   let loadingDotsTimer = null
   let loadingDotsCount = 1
@@ -176,6 +182,91 @@
 
   function isReadAloudAudioExpected() {
     return Date.now() <= readAloudExpectedUntil
+  }
+
+  function getAudioDebugState(audio = currentAudio, target = null) {
+    const now = Date.now()
+    const isAudio = isRealAudio(audio)
+
+    return {
+      activeAudioSession,
+      hasSeenPlayableAudio,
+      isAudioLoading,
+      currentAudioIsTarget: Boolean(target && currentAudio === target),
+      readAloudExpected: isReadAloudAudioExpected(),
+      provisional: Boolean(provisionalAudioTimer),
+      currentTime: isAudio ? roundTo(audio.currentTime, 3) : null,
+      paused: isAudio ? audio.paused : null,
+      ended: isAudio ? audio.ended : null,
+      readyState: isAudio ? audio.readyState : null,
+      networkState: isAudio ? audio.networkState : null,
+      duration: isAudio ? audio.duration : null,
+      hasSrc: isAudio ? Boolean(audio.src) : false,
+      hasCurrentSrc: isAudio ? Boolean(audio.currentSrc) : false,
+      msSincePlay: audioDebugPlayStartedAt ? now - audioDebugPlayStartedAt : null,
+    }
+  }
+
+  function debugAudioSession(eventName, audio = currentAudio, details = {}) {
+    if (!DEBUG_AUDIO_SESSION) return
+
+    console.debug('[ReadAloudControls:audio]', eventName, {
+      ...details,
+      ...getAudioDebugState(audio, details.target || null),
+    })
+  }
+
+  function clearProvisionalAudioTimer() {
+    if (!provisionalAudioTimer) return
+
+    clearTimeout(provisionalAudioTimer)
+    provisionalAudioTimer = null
+  }
+
+  function clearAudioSession() {
+    debugAudioSession('session cleanup')
+
+    activeAudioSession = false
+    isAudioLoading = false
+    hasSeenPlayableAudio = false
+    currentAudio = null
+    readAloudExpectedUntil = 0
+    audioDebugPlayStartedAt = 0
+    audioDebugLoggedProgress = false
+    clearProvisionalAudioTimer()
+    stopLoadingDots()
+  }
+
+  function startProvisionalAudioTimer(audio) {
+    clearProvisionalAudioTimer()
+
+    provisionalAudioTimer = window.setTimeout(() => {
+      provisionalAudioTimer = null
+
+      if (currentAudio !== audio || hasSeenPlayableAudio) return
+
+      debugAudioSession('provisional timeout cleanup', audio)
+      clearAudioSession()
+      updateUI()
+    }, PROVISIONAL_AUDIO_TIMEOUT_MS)
+  }
+
+  function confirmAudioSession(audio) {
+    if (!isRealAudio(audio)) return
+
+    const wasConfirmed = activeAudioSession && hasSeenPlayableAudio
+
+    currentAudio = audio
+    activeAudioSession = true
+    hasSeenPlayableAudio = true
+    isAudioLoading = false
+    readAloudExpectedUntil = 0
+    clearProvisionalAudioTimer()
+    forceSpeed(currentAudio)
+
+    if (!wasConfirmed) {
+      debugAudioSession('session confirm', audio)
+    }
   }
 
   function isAudioStillUsable(audio) {
@@ -317,18 +408,37 @@
     'play',
     (event) => {
       if (!isRealAudio(event.target)) return
-      if (!activeAudioSession && !isReadAloudAudioExpected()) return
 
-      activeAudioSession = true
-      hasSeenPlayableAudio = true
-      isAudioLoading = true
+      const wasAcceptedSession =
+        activeAudioSession &&
+        currentAudio === event.target &&
+        hasSeenPlayableAudio
+
+      audioDebugPlayStartedAt = Date.now()
+      audioDebugLoggedProgress = false
       currentAudio = event.target
-      readAloudExpectedUntil = 0
+      hasSeenPlayableAudio = wasAcceptedSession
 
       // Full scan on play, because ChatGPT may create/swap audio elements here.
       forceSpeedOnAllAudio()
       forceSpeed(currentAudio)
 
+      if (wasAcceptedSession) {
+        activeAudioSession = true
+        isAudioLoading = currentAudio.currentTime <= 0
+      } else if (isReadAloudAudioExpected()) {
+        activeAudioSession = true
+        isAudioLoading = true
+      } else {
+        activeAudioSession = false
+        isAudioLoading = false
+      }
+
+      startProvisionalAudioTimer(currentAudio)
+      debugAudioSession('play', currentAudio, {
+        target: event.target,
+        wasAcceptedSession,
+      })
       updateUI()
 
       log('audio play detected', currentAudio)
@@ -342,8 +452,8 @@
       if (!isRealAudio(event.target)) return
 
       if (event.target === currentAudio) {
-        isAudioLoading = false
-        forceSpeed(currentAudio)
+        debugAudioSession('playing', event.target, { target: event.target })
+        confirmAudioSession(event.target)
         updateUI()
       }
     },
@@ -357,7 +467,14 @@
 
       if (event.target === currentAudio) {
         if (currentAudio.currentTime > 0) {
-          isAudioLoading = false
+          if (!audioDebugLoggedProgress) {
+            audioDebugLoggedProgress = true
+            debugAudioSession('timeupdate progress', event.target, {
+              target: event.target,
+            })
+          }
+
+          confirmAudioSession(event.target)
         }
 
         forceSpeed(currentAudio)
@@ -372,7 +489,12 @@
     (event) => {
       if (!isRealAudio(event.target)) return
 
-      if (event.target === currentAudio && currentAudio.currentTime <= 0) {
+      if (
+        event.target === currentAudio &&
+        activeAudioSession &&
+        currentAudio.currentTime <= 0
+      ) {
+        debugAudioSession('waiting', event.target, { target: event.target })
         isAudioLoading = true
         updateUI()
       }
@@ -386,6 +508,7 @@
       if (!isRealAudio(event.target)) return
 
       if (event.target === currentAudio) {
+        debugAudioSession('pause', event.target, { target: event.target })
         updateUI()
       }
     },
@@ -398,12 +521,8 @@
       if (!isRealAudio(event.target)) return
 
       if (event.target === currentAudio) {
-        activeAudioSession = false
-        isAudioLoading = false
-        hasSeenPlayableAudio = false
-        currentAudio = null
-        readAloudExpectedUntil = 0
-        stopLoadingDots()
+        debugAudioSession('ended', event.target, { target: event.target })
+        clearAudioSession()
         updateUI()
       }
     },
@@ -784,13 +903,7 @@
 
       lastUrl = location.href
       lastReadMsgId = null
-      activeAudioSession = false
-      isAudioLoading = false
-      hasSeenPlayableAudio = false
-      currentAudio = null
-      readAloudExpectedUntil = 0
-
-      stopLoadingDots()
+      clearAudioSession()
 
       loadAutoReadState()
       updateAutoReadButton()
@@ -832,9 +945,10 @@
    **************************************************************************/
 
   function getPlayerState(audio) {
-    if (!activeAudioSession || !audio || !hasSeenPlayableAudio) return 'idle'
+    if (!activeAudioSession || !audio) return 'idle'
     if (audio.ended) return 'ended'
     if (isAudioLoading) return 'loading'
+    if (!hasSeenPlayableAudio) return 'idle'
     if (audio.paused) return 'paused'
     return 'playing'
   }
@@ -862,6 +976,15 @@
     const audio = currentAudio
     const state = getPlayerState(audio)
     const visible = shouldShowPlayer(state)
+    const debugUiState = `${state}:${visible ? 'visible' : 'hidden'}`
+
+    if (debugUiState !== lastDebugUiState) {
+      lastDebugUiState = debugUiState
+      debugAudioSession('updateUI visibility', audio, {
+        state,
+        visible,
+      })
+    }
 
     setVisibleKeepSpace(playerGroup, visible)
 
