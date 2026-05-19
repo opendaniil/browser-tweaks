@@ -7,7 +7,9 @@
 // @match        https://chatgpt.com/*
 // @match        https://*.chatgpt.com/*
 // @match        https://chat.openai.com/*
-// @grant        none
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // @run-at       document-start
 // @license      AGPL-3.0-or-later
 // @homepageURL  https://github.com/opendaniil/browser-tweaks
@@ -27,6 +29,10 @@
 
 	const SPEED_STORAGE_KEY = "chatgptReadAloudComposerSpeedMvp";
 	const AUTO_READ_STORAGE_PREFIX = "chatgptReadAloudAutoRead:";
+	const DEFAULT_VOLUME_BOOST = 4;
+	const MIN_VOLUME_BOOST = 1;
+	const MAX_VOLUME_BOOST = 8;
+	const VOLUME_BOOST_STORAGE_KEY = "volumeBoost";
 
 	const UI_ID = "isolated-speed-ui";
 
@@ -42,6 +48,7 @@
 	 **************************************************************************/
 
 	let speed = 1;
+	let volumeBoost = DEFAULT_VOLUME_BOOST;
 	let currentAudio = null;
 	let watchdogTimer = null;
 	let observer = null;
@@ -57,6 +64,8 @@
 	let audioDebugPlayStartedAt = 0;
 	let audioDebugLoggedProgress = false;
 	let lastDebugUiState = null;
+	let volumeBoostContext = null;
+	const boostedAudioElements = new WeakMap();
 
 	let loadingDotsTimer = null;
 	let loadingDotsCount = 1;
@@ -329,6 +338,50 @@
 		localStorage.setItem(SPEED_STORAGE_KEY, String(speed));
 	}
 
+	function loadVolumeBoost() {
+		const saved = Number(
+			GM_getValue(VOLUME_BOOST_STORAGE_KEY, DEFAULT_VOLUME_BOOST),
+		);
+
+		volumeBoost = Number.isFinite(saved)
+			? clamp(saved, MIN_VOLUME_BOOST, MAX_VOLUME_BOOST)
+			: DEFAULT_VOLUME_BOOST;
+	}
+
+	function saveVolumeBoost() {
+		GM_setValue(VOLUME_BOOST_STORAGE_KEY, volumeBoost);
+	}
+
+	function setVolumeBoost(nextBoost) {
+		if (typeof nextBoost === "string" && nextBoost.trim() === "") return;
+
+		const next = Number(nextBoost);
+
+		if (!Number.isFinite(next)) return;
+
+		volumeBoost = roundTo(clamp(next, MIN_VOLUME_BOOST, MAX_VOLUME_BOOST));
+		saveVolumeBoost();
+	}
+
+	function setupMenuCommands() {
+		GM_registerMenuCommand(`Set volume boost: ${volumeBoost}x`, () => {
+			const input = prompt(
+				`Set volume boost (${MIN_VOLUME_BOOST}-${MAX_VOLUME_BOOST})`,
+				String(volumeBoost),
+			);
+
+			if (input === null) return;
+
+			const next = Number(input);
+
+			if (!Number.isFinite(next)) {
+				return;
+			}
+
+			setVolumeBoost(next);
+		});
+	}
+
 	function updateDisplay() {
 		if (speedDisplay) {
 			speedDisplay.textContent = `${speed}x`;
@@ -357,6 +410,55 @@
 	 * Force playbackRate
 	 **************************************************************************/
 
+	function forceVolumeBoost(audio) {
+		const existing = boostedAudioElements.get(audio);
+
+		if (existing) {
+			if (existing.gain.gain.value !== volumeBoost) {
+				existing.gain.gain.value = volumeBoost;
+			}
+
+			if (existing.context.state === "suspended") {
+				existing.context.resume().catch((error) => {
+					log("volume boost resume failed", error);
+				});
+			}
+
+			return;
+		}
+
+		const AudioContextConstructor =
+			window.AudioContext || window.webkitAudioContext;
+
+		if (!AudioContextConstructor) return;
+
+		try {
+			if (!volumeBoostContext || volumeBoostContext.state === "closed") {
+				volumeBoostContext = new AudioContextConstructor();
+			}
+
+			const source = volumeBoostContext.createMediaElementSource(audio);
+			const gain = volumeBoostContext.createGain();
+
+			gain.gain.value = volumeBoost;
+			source.connect(gain);
+			gain.connect(volumeBoostContext.destination);
+			boostedAudioElements.set(audio, {
+				context: volumeBoostContext,
+				source,
+				gain,
+			});
+
+			if (volumeBoostContext.state === "suspended") {
+				volumeBoostContext.resume().catch((error) => {
+					log("volume boost resume failed", error);
+				});
+			}
+		} catch (error) {
+			log("forceVolumeBoost failed", error);
+		}
+	}
+
 	function forceSpeed(audio) {
 		if (!isRealAudio(audio)) return;
 
@@ -365,6 +467,12 @@
 				ignoreRateChange = true;
 				audio.playbackRate = speed;
 			}
+
+			if (audio.volume !== 1) {
+				audio.volume = 1;
+			}
+
+			forceVolumeBoost(audio);
 
 			audio.preservesPitch = true;
 			audio.mozPreservesPitch = true;
@@ -1173,7 +1281,12 @@
 
 	function init() {
 		loadSpeed();
+		loadVolumeBoost();
 		loadAutoReadState();
+
+		if (typeof GM_registerMenuCommand === "function") {
+			setupMenuCommands();
+		}
 
 		if (document.readyState === "loading") {
 			document.addEventListener("DOMContentLoaded", initDOM, { once: true });
