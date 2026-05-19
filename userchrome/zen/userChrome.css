@@ -4,23 +4,23 @@
  */
 
 #zen-appcontent-navbar-wrapper {
-  display: none !important;
+	display: none !important;
 }
 
 #zen-tabbox-wrapper {
-  margin: 0 !important;
+	margin: 0 !important;
 }
 
 #navigator-toolbox {
-  filter: blur(3px) !important;
-  opacity: 0.3 !important;
-  transition-property: filter, opacity !important;
-  transition-duration: 240ms !important;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
-  will-change: filter, opacity !important;
+	filter: blur(3px) !important;
+	opacity: 0.3 !important;
+	transition-property: filter, opacity !important;
+	transition-duration: 240ms !important;
+	transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+	will-change: filter, opacity !important;
 }
 
 #navigator-toolbox:hover {
-  filter: blur(0) !important;
-  opacity: 0.8 !important;
+	filter: blur(0) !important;
+	opacity: 0.8 !important;
 }

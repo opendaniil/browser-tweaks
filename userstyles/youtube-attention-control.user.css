@@ -12,53 +12,53 @@
 ==/UserStyle== */
 
 @-moz-document domain("youtube.com") {
-  /**************************************************************************
-   * Header
-   **************************************************************************/
+	/**************************************************************************
+	 * Header
+	 **************************************************************************/
 
-  #masthead-container {
-    opacity: 0.8;
-  }
+	#masthead-container {
+		opacity: 0.8;
+	}
 
-  /**************************************************************************
-   * Navigation
-   **************************************************************************/
+	/**************************************************************************
+	 * Navigation
+	 **************************************************************************/
 
-  [role="navigation"] {
-    visibility: hidden;
-  }
+	[role="navigation"] {
+		visibility: hidden;
+	}
 
-  /**************************************************************************
-   * Shorts
-   **************************************************************************/
+	/**************************************************************************
+	 * Shorts
+	 **************************************************************************/
 
-  [title="Shorts"],
-  ytd-video-renderer:has([aria-label="Shorts"]),
-  ytd-shelf-renderer:not(:has(#image-container)),
-  grid-shelf-view-model,
-  ytd-rich-section-renderer:has([is-shorts=""]),
-  ytd-reel-shelf-renderer {
-    display: none !important;
-  }
+	[title="Shorts"],
+	ytd-video-renderer:has([aria-label="Shorts"]),
+	ytd-shelf-renderer:not(:has(#image-container)),
+	grid-shelf-view-model,
+	ytd-rich-section-renderer:has([is-shorts=""]),
+	ytd-reel-shelf-renderer {
+		display: none !important;
+	}
 
-  /**************************************************************************
-   * Blur / attention control
-   **************************************************************************/
+	/**************************************************************************
+	 * Blur / attention control
+	 **************************************************************************/
 
-  ytd-watch-flexy ytd-comments,
-  #above-the-fold,
-  #contents {
-    filter: blur(8px);
-    opacity: 0.3;
-    transition:
-      filter 0.3s ease,
-      opacity 0.3s ease;
-  }
+	ytd-watch-flexy ytd-comments,
+	#above-the-fold,
+	#contents {
+		filter: blur(8px);
+		opacity: 0.3;
+		transition:
+			filter 0.3s ease,
+			opacity 0.3s ease;
+	}
 
-  ytd-watch-flexy ytd-comments:hover,
-  #above-the-fold:hover,
-  #contents:hover {
-    filter: blur(0);
-    opacity: 0.8;
-  }
+	ytd-watch-flexy ytd-comments:hover,
+	#above-the-fold:hover,
+	#contents:hover {
+		filter: blur(0);
+		opacity: 0.8;
+	}
 }

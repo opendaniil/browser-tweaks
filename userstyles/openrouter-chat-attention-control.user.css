@@ -12,26 +12,26 @@
 ==/UserStyle== */
 
 @-moz-document url-prefix("https://openrouter.ai/chat") {
-  /**************************************************************************
-   * Sidebar attention control
-   **************************************************************************/
+	/**************************************************************************
+	 * Sidebar attention control
+	 **************************************************************************/
 
-  aside {
-    filter: blur(8px);
-    opacity: 0.3;
-  }
+	aside {
+		filter: blur(8px);
+		opacity: 0.3;
+	}
 
-  aside:hover {
-    filter: blur(0);
-    opacity: 0.8;
-  }
+	aside:hover {
+		filter: blur(0);
+		opacity: 0.8;
+	}
 
-  /**************************************************************************
-   * Hide playground presets
-   **************************************************************************/
+	/**************************************************************************
+	 * Hide playground presets
+	 **************************************************************************/
 
-  [data-testid="playground-model-presets"],
-  [data-testid="playground-model-presets"] + div {
-    visibility: hidden;
-  }
+	[data-testid="playground-model-presets"],
+	[data-testid="playground-model-presets"] + div {
+		visibility: hidden;
+	}
 }
