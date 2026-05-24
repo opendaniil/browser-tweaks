@@ -80,7 +80,7 @@
 	let playerGroup = null;
 	let playPauseButton = null;
 	let speedDisplay = null;
-	let timeText = null;
+	let voiceBars = null;
 	let autoReadButton = null;
 
 	/**************************************************************************
@@ -102,18 +102,6 @@
 
 	function sleep(ms) {
 		return new Promise((resolve) => setTimeout(resolve, ms));
-	}
-
-	function formatTime(seconds) {
-		if (!Number.isFinite(seconds) || seconds < 0) {
-			return "--:--";
-		}
-
-		const total = Math.floor(seconds);
-		const m = Math.floor(total / 60);
-		const s = total % 60;
-
-		return `${m}:${String(s).padStart(2, "0")}`;
 	}
 
 	function isVisible(el) {
@@ -1071,17 +1059,82 @@
 	 * UI
 	 **************************************************************************/
 
-	function buildTimeText(audio) {
-		if (!audio) return "--:-- / --:--";
+	function ensureVoiceBarsStyle() {
+		if (document.getElementById("read-aloud-voice-bars-style")) return;
 
-		const current = formatTime(audio.currentTime);
-		const duration = formatTime(audio.duration);
+		const style = document.createElement("style");
+		style.id = "read-aloud-voice-bars-style";
+		style.textContent = `
+		#isolated-speed-ui .read-aloud-voice-bars {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			gap: 3px;
+			width: 42px;
+			height: 30px;
+			opacity: 0.75;
+		}
 
-		return `${current} / ${duration}`;
+		#isolated-speed-ui .read-aloud-voice-bar {
+			width: 3px;
+			height: 8px;
+			border-radius: 999px;
+			background: currentColor;
+			transform-origin: center;
+			animation: readAloudVoiceBars 0.8s ease-in-out infinite;
+			animation-play-state: paused;
+		}
+
+		#isolated-speed-ui .read-aloud-voice-bar:nth-child(1) {
+			animation-delay: -0.45s;
+		}
+
+		#isolated-speed-ui .read-aloud-voice-bar:nth-child(2) {
+			animation-delay: -0.3s;
+		}
+
+		#isolated-speed-ui .read-aloud-voice-bar:nth-child(3) {
+			animation-delay: -0.15s;
+		}
+
+		#isolated-speed-ui .read-aloud-voice-bar:nth-child(4) {
+			animation-delay: 0s;
+		}
+
+		#isolated-speed-ui .read-aloud-voice-bar:nth-child(5) {
+			animation-delay: -0.25s;
+		}
+
+		#isolated-speed-ui .read-aloud-voice-bars.is-playing .read-aloud-voice-bar {
+			animation-play-state: running;
+		}
+
+		#isolated-speed-ui .read-aloud-voice-bars.is-muted {
+			opacity: 0.35;
+		}
+
+		@keyframes readAloudVoiceBars {
+			0%, 100% {
+				transform: scaleY(0.55);
+			}
+			50% {
+				transform: scaleY(1.8);
+			}
+		}
+	`;
+
+		document.head.appendChild(style);
+	}
+
+	function updateVoiceBarsState(state) {
+		if (!voiceBars) return;
+
+		voiceBars.classList.toggle("is-playing", state === "playing");
+		voiceBars.classList.toggle("is-muted", state !== "playing");
 	}
 
 	function updateUI() {
-		if (!playerGroup || !playPauseButton || !timeText) return;
+		if (!playerGroup || !playPauseButton || !voiceBars) return;
 
 		const audio = currentAudio;
 		const state = getPlayerState(audio);
@@ -1096,6 +1149,7 @@
 			});
 		}
 
+		updateVoiceBarsState(state);
 		setVisibleKeepSpace(playerGroup, visible);
 
 		if (!visible) {
@@ -1104,7 +1158,6 @@
 			playPauseButton.disabled = true;
 			playPauseButton.textContent = "▶";
 			playPauseButton.title = "No active Read Aloud audio";
-			timeText.textContent = "--:-- / --:--";
 			return;
 		}
 
@@ -1112,7 +1165,6 @@
 			playPauseButton.disabled = true;
 			playPauseButton.textContent = ".".repeat(loadingDotsCount);
 			playPauseButton.title = "Loading Read Aloud audio";
-			timeText.textContent = buildTimeText(audio);
 			startLoadingDots();
 			return;
 		}
@@ -1123,7 +1175,6 @@
 			playPauseButton.disabled = false;
 			playPauseButton.textContent = "▶";
 			playPauseButton.title = "Play";
-			timeText.textContent = buildTimeText(audio);
 			return;
 		}
 
@@ -1131,13 +1182,14 @@
 			playPauseButton.disabled = false;
 			playPauseButton.textContent = "⏸";
 			playPauseButton.title = "Pause";
-			timeText.textContent = buildTimeText(audio);
 			return;
 		}
 	}
 
 	function createUI() {
 		if (document.getElementById(UI_ID)) return;
+
+		ensureVoiceBarsStyle();
 
 		const threadBottom =
 			document.querySelector("#thread-bottom") ||
@@ -1155,7 +1207,7 @@
             margin-left: auto;
             margin-right: 12px;
             width: fit-content;
-            min-width: 292px;
+            min-width: 190px;
             max-width: 460px;
             font-size: 14px;
             align-self: flex-start;
@@ -1181,12 +1233,15 @@
 		playPauseButton.style.width = "40px";
 		playPauseButton.onclick = togglePlayPause;
 
-		timeText = document.createElement("span");
-		timeText.textContent = "--:-- / --:--";
-		timeText.style.opacity = "0.75";
-		timeText.style.whiteSpace = "nowrap";
-		timeText.style.width = "96px";
-		timeText.style.textAlign = "left";
+		voiceBars = document.createElement("div");
+		voiceBars.className = "read-aloud-voice-bars is-muted";
+		voiceBars.title = "Read Aloud activity";
+
+		for (let i = 0; i < 5; i++) {
+			const bar = document.createElement("span");
+			bar.className = "read-aloud-voice-bar";
+			voiceBars.appendChild(bar);
+		}
 
 		const minus = document.createElement("button");
 		minus.type = "button";
@@ -1223,7 +1278,7 @@
 		plus.onclick = () => changeSpeed(SPEED_STEP);
 
 		playerGroup.appendChild(playPauseButton);
-		playerGroup.appendChild(timeText);
+		playerGroup.appendChild(voiceBars);
 		playerGroup.appendChild(minus);
 		playerGroup.appendChild(speedDisplay);
 		playerGroup.appendChild(plus);
