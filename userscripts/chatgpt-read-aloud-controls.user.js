@@ -1,7 +1,6 @@
 // ==UserScript==
 // @name         ChatGPT Read Aloud: Speed, Pause, Auto-Read
-// @namespace    https://github.com/opendaniil
-// @version      4.15
+// @version      4.15.0
 // @description  Adds compact controls for ChatGPT Read Aloud: realtime speed, play/pause, Space shortcut, and per-chat auto-read.
 // @icon         https://chatgpt.com/favicon.ico
 // @match        https://chatgpt.com/*
@@ -12,7 +11,7 @@
 // @grant        GM_registerMenuCommand
 // @run-at       document-start
 // @license      AGPL-3.0-or-later
-// @homepageURL  https://github.com/opendaniil/browser-tweaks
+// @homepageURL  https://github.com/opendaniil/browser-tweaks/blob/main/userscripts/README.md#chatgpt-read-aloud-speed-pause-auto-read
 // @supportURL   https://github.com/opendaniil/browser-tweaks/issues
 // @downloadURL  https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userscripts/chatgpt-read-aloud-controls.user.js
 // @updateURL    https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userscripts/chatgpt-read-aloud-controls.user.js

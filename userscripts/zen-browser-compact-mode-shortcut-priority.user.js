@@ -1,6 +1,5 @@
 // ==UserScript==
 // @name         Zen Browser: Compact Mode Shortcut Priority
-// @namespace    https://github.com/opendaniil
 // @version      1.0.0
 // @description  Prevents websites from handling Cmd+S / Ctrl+S so Zen Browser can use it for Toggle Compact Mode.
 // @icon         https://zen-browser.app/favicon.ico
@@ -8,8 +7,8 @@
 // @grant        none
 // @run-at       document-start
 // @allFrames    true
-// @license      MIT
-// @homepageURL  https://github.com/opendaniil/browser-tweaks
+// @license      AGPL-3.0-or-later
+// @homepageURL  https://github.com/opendaniil/browser-tweaks/blob/main/userscripts/README.md#zen-browser-compact-mode-shortcut-priority
 // @supportURL   https://github.com/opendaniil/browser-tweaks/issues
 // @downloadURL  https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userscripts/zen-browser-compact-mode-shortcut-priority.user.js
 // @updateURL    https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userscripts/zen-browser-compact-mode-shortcut-priority.user.js

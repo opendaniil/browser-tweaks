@@ -1,6 +1,5 @@
 // ==UserScript==
 // @name         ChatGPT Dictation Hotkey + Auto-Send
-// @namespace    https://github.com/opendaniil
 // @version      2.4.0
 // @description  Alt+D starts/stops ChatGPT dictation and optionally auto-sends when the Send button becomes available.
 // @icon         https://chatgpt.com/favicon.ico
@@ -8,8 +7,8 @@
 // @match        https://chat.openai.com/*
 // @grant        none
 // @run-at       document-idle
-// @license      MIT
-// @homepageURL  https://github.com/opendaniil/browser-tweaks
+// @license      AGPL-3.0-or-later
+// @homepageURL  https://github.com/opendaniil/browser-tweaks/blob/main/userscripts/README.md#chatgpt-dictation-hotkey--auto-send
 // @supportURL   https://github.com/opendaniil/browser-tweaks/issues
 // @downloadURL  https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userscripts/chatgpt-dictation-hotkey-autosend.user.js
 // @updateURL    https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userscripts/chatgpt-dictation-hotkey-autosend.user.js
