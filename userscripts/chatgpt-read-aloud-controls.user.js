@@ -30,7 +30,7 @@
 	const AUTO_READ_STORAGE_PREFIX = "chatgptReadAloudAutoRead:";
 	const DEFAULT_VOLUME_BOOST = 4;
 	const MIN_VOLUME_BOOST = 1;
-	const MAX_VOLUME_BOOST = 8;
+	const MAX_VOLUME_BOOST = 24;
 	const VOLUME_BOOST_STORAGE_KEY = "volumeBoost";
 
 	const UI_ID = "isolated-speed-ui";
