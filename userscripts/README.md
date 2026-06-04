@@ -15,6 +15,11 @@ Auto-clicks Send when ChatGPT URL has `?q=` or `?prompt=`.
 
 [Install](https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userscripts/chatgpt-prompt-url-auto-send.user.js)
 
+## ChatGPT Smart Enter and Paste Focus
+Focuses the prompt on paste outside editable fields and sends with Enter when the prompt already has text.
+
+[Install](https://raw.githubusercontent.com/opendaniil/browser-tweaks/main/userscripts/chatgpt-smart-enter-and-paste-focus.user.js)
+
 ## ChatGPT Read Aloud: Speed, Pause, Auto-Read
 Adds compact controls for Read Aloud: speed, play/pause, Space shortcut, and per-chat auto-read.
 
