@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ChatGPT Read Aloud: Speed, Pause, Auto-Read
-// @version      4.15.0
+// @version      4.17.0
 // @description  Adds compact controls for ChatGPT Read Aloud: realtime speed, play/pause, Space shortcut, and per-chat auto-read.
 // @icon         https://chatgpt.com/favicon.ico
 // @match        https://chatgpt.com/*
@@ -35,12 +35,9 @@
 
 	const UI_ID = "isolated-speed-ui";
 
-	const WATCHDOG_INTERVAL_MS = 500;
 	const POLL_INTERVAL = 600;
-	const READ_DELAY = 1000;
 	const READ_ALOUD_EXPECTATION_MS = 10000;
 	const PROVISIONAL_AUDIO_TIMEOUT_MS = 3000;
-	const DEBUG_AUDIO_SESSION = false;
 
 	/**************************************************************************
 	 * State
@@ -49,25 +46,13 @@
 	let speed = 1;
 	let volumeBoost = DEFAULT_VOLUME_BOOST;
 	let currentAudio = null;
-	let watchdogTimer = null;
-	let observer = null;
-	let autoReadObserver = null;
-	let routeObserver = null;
-	let ignoreRateChange = false;
-	let activeAudioSession = false;
 	let hasSeenPlayableAudio = false;
 	let isAudioLoading = false;
-	let keyboardShortcutsInstalled = false;
-	let readAloudClickListenerInstalled = false;
+	const directlyObservedAudioElements = new WeakSet();
 	let provisionalAudioTimer = null;
-	let audioDebugPlayStartedAt = 0;
-	let audioDebugLoggedProgress = false;
-	let lastDebugUiState = null;
 	let volumeBoostContext = null;
 	const boostedAudioElements = new WeakMap();
 
-	let loadingDotsTimer = null;
-	let loadingDotsCount = 1;
 
 	let isAutoReadEnabled = false;
 	let lastReadMsgId = null;
@@ -124,29 +109,6 @@
 		el.style.pointerEvents = visible ? "auto" : "none";
 	}
 
-	function startLoadingDots() {
-		if (loadingDotsTimer) return;
-
-		loadingDotsTimer = window.setInterval(() => {
-			loadingDotsCount = loadingDotsCount >= 3 ? 1 : loadingDotsCount + 1;
-
-			if (
-				playPauseButton?.disabled &&
-				/^[.]+$/.test(playPauseButton.textContent || "")
-			) {
-				playPauseButton.textContent = ".".repeat(loadingDotsCount);
-			}
-		}, 350);
-	}
-
-	function stopLoadingDots() {
-		if (loadingDotsTimer) {
-			clearInterval(loadingDotsTimer);
-			loadingDotsTimer = null;
-		}
-
-		loadingDotsCount = 1;
-	}
 
 	function getChatStorageKey() {
 		return `${AUTO_READ_STORAGE_PREFIX}${location.pathname || "unknown"}`;
@@ -168,9 +130,6 @@
 		return audio instanceof HTMLAudioElement;
 	}
 
-	function getAllAudioElements() {
-		return Array.from(document.querySelectorAll("audio")).filter(isRealAudio);
-	}
 
 	function expectReadAloudAudio() {
 		readAloudExpectedUntil = Date.now() + READ_ALOUD_EXPECTATION_MS;
@@ -180,39 +139,6 @@
 		return Date.now() <= readAloudExpectedUntil;
 	}
 
-	function getAudioDebugState(audio = currentAudio, target = null) {
-		const now = Date.now();
-		const isAudio = isRealAudio(audio);
-
-		return {
-			activeAudioSession,
-			hasSeenPlayableAudio,
-			isAudioLoading,
-			currentAudioIsTarget: Boolean(target && currentAudio === target),
-			readAloudExpected: isReadAloudAudioExpected(),
-			provisional: Boolean(provisionalAudioTimer),
-			currentTime: isAudio ? roundTo(audio.currentTime, 3) : null,
-			paused: isAudio ? audio.paused : null,
-			ended: isAudio ? audio.ended : null,
-			readyState: isAudio ? audio.readyState : null,
-			networkState: isAudio ? audio.networkState : null,
-			duration: isAudio ? audio.duration : null,
-			hasSrc: isAudio ? Boolean(audio.src) : false,
-			hasCurrentSrc: isAudio ? Boolean(audio.currentSrc) : false,
-			msSincePlay: audioDebugPlayStartedAt
-				? now - audioDebugPlayStartedAt
-				: null,
-		};
-	}
-
-	function debugAudioSession(eventName, audio = currentAudio, details = {}) {
-		if (!DEBUG_AUDIO_SESSION) return;
-
-		console.debug("[ReadAloudControls:audio]", eventName, {
-			...details,
-			...getAudioDebugState(audio, details.target || null),
-		});
-	}
 
 	function clearProvisionalAudioTimer() {
 		if (!provisionalAudioTimer) return;
@@ -222,17 +148,12 @@
 	}
 
 	function clearAudioSession() {
-		debugAudioSession("session cleanup");
 
-		activeAudioSession = false;
 		isAudioLoading = false;
 		hasSeenPlayableAudio = false;
 		currentAudio = null;
 		readAloudExpectedUntil = 0;
-		audioDebugPlayStartedAt = 0;
-		audioDebugLoggedProgress = false;
 		clearProvisionalAudioTimer();
-		stopLoadingDots();
 	}
 
 	function startProvisionalAudioTimer(audio) {
@@ -243,7 +164,6 @@
 
 			if (currentAudio !== audio || hasSeenPlayableAudio) return;
 
-			debugAudioSession("provisional timeout cleanup", audio);
 			clearAudioSession();
 			updateUI();
 		}, PROVISIONAL_AUDIO_TIMEOUT_MS);
@@ -252,59 +172,116 @@
 	function confirmAudioSession(audio) {
 		if (!isRealAudio(audio)) return;
 
-		const wasConfirmed = activeAudioSession && hasSeenPlayableAudio;
 
 		currentAudio = audio;
-		activeAudioSession = true;
 		hasSeenPlayableAudio = true;
 		isAudioLoading = false;
 		readAloudExpectedUntil = 0;
 		clearProvisionalAudioTimer();
 		forceSpeed(currentAudio);
 
-		if (!wasConfirmed) {
-			debugAudioSession("session confirm", audio);
-		}
 	}
 
-	function isAudioStillUsable(audio) {
+
+
+
+	function shouldCaptureAudio(audio) {
 		if (!isRealAudio(audio)) return false;
 
-		// Some streams may not have src/currentSrc, so do not check src.
-		// DOM presence is enough for our current purpose.
-		return document.contains(audio);
+		return (
+			isReadAloudAudioExpected() ||
+			currentAudio === audio
+		);
 	}
 
-	function getBestAudioCandidate() {
-		if (!activeAudioSession) return null;
 
-		const audios = getAllAudioElements();
-
-		if (currentAudio && audios.includes(currentAudio) && hasSeenPlayableAudio) {
-			return currentAudio;
-		}
-
-		const playing = audios.find((audio) => !audio.paused && !audio.ended);
-
-		if (playing) {
-			return playing;
-		}
-
-		return null;
-	}
-
-	function refreshCurrentAudioIfNeeded() {
+	function observeAudioDirectly(audio) {
 		if (
-			activeAudioSession &&
-			currentAudio &&
-			isAudioStillUsable(currentAudio) &&
-			hasSeenPlayableAudio
+			!isRealAudio(audio) ||
+			directlyObservedAudioElements.has(audio)
 		) {
-			return currentAudio;
+			return;
 		}
 
-		currentAudio = getBestAudioCandidate();
-		return currentAudio;
+		directlyObservedAudioElements.add(audio);
+
+		audio.addEventListener(
+			"playing",
+			() => handleAudioPlaying(audio),
+			true,
+		);
+		audio.addEventListener(
+			"timeupdate",
+			() => handleAudioTimeUpdate(audio),
+			true,
+		);
+		audio.addEventListener(
+			"waiting",
+			() => handleAudioWaiting(audio),
+			true,
+		);
+		audio.addEventListener("pause", () => handleAudioPause(audio), true);
+		audio.addEventListener("ended", () => handleAudioEnded(audio), true);
+		audio.addEventListener(
+			"ratechange",
+			() => handleAudioRateChange(audio),
+			true,
+		);
+	}
+
+	function installAudioPlayHook() {
+
+		const mediaPrototype = window.HTMLMediaElement?.prototype;
+		const originalPlay = mediaPrototype?.play;
+		const descriptor = mediaPrototype
+			? Object.getOwnPropertyDescriptor(mediaPrototype, "play")
+			: null;
+
+		if (
+			!mediaPrototype ||
+			typeof originalPlay !== "function" ||
+			!descriptor ||
+			!descriptor.writable
+		) {
+			log("audio play hook unavailable");
+			return;
+		}
+
+		const wrappedPlay = function (...args) {
+			try {
+				if (isRealAudio(this) && shouldCaptureAudio(this)) {
+					const wasConfirmed =
+						currentAudio === this && hasSeenPlayableAudio;
+					currentAudio = this;
+					hasSeenPlayableAudio = wasConfirmed;
+					isAudioLoading = wasConfirmed
+						? this.currentTime <= 0
+						: true;
+					observeAudioDirectly(this);
+					if (wasConfirmed) {
+						clearProvisionalAudioTimer();
+					} else {
+						startProvisionalAudioTimer(this);
+					}
+					forceSpeed(this);
+					updateUI();
+					log("audio play detected", currentAudio);
+				}
+			} catch (error) {
+				log("audio play observation failed", error);
+			}
+
+			return Reflect.apply(originalPlay, this, args);
+		};
+
+		try {
+			Object.defineProperty(mediaPrototype, "play", {
+				...descriptor,
+				value: wrappedPlay,
+			});
+		} catch (error) {
+			log("audio play hook installation failed", error);
+		}
 	}
 
 	/**************************************************************************
@@ -359,13 +336,7 @@
 
 			if (input === null) return;
 
-			const next = Number(input);
-
-			if (!Number.isFinite(next)) {
-				return;
-			}
-
-			setVolumeBoost(next);
+			setVolumeBoost(Number(input));
 		});
 	}
 
@@ -383,8 +354,7 @@
 		saveSpeed();
 		updateDisplay();
 
-		// Full scan only when the user actually changes speed.
-		forceSpeedOnAllAudio();
+		forceSpeed(currentAudio);
 
 		updateUI();
 	}
@@ -451,7 +421,6 @@
 
 		try {
 			if (Math.abs(audio.playbackRate - speed) > 0.001) {
-				ignoreRateChange = true;
 				audio.playbackRate = speed;
 			}
 
@@ -469,199 +438,66 @@
 		}
 	}
 
-	function forceSpeedOnAllAudio() {
-		const audios = getAllAudioElements();
 
-		for (const audio of audios) {
-			forceSpeed(audio);
+
+	function handleAudioPlaying(audio) {
+		if (audio !== currentAudio) return;
+
+		confirmAudioSession(audio);
+		updateUI();
+	}
+
+	function handleAudioTimeUpdate(audio) {
+		if (audio !== currentAudio) return;
+
+		if (audio.currentTime > 0) {
+
+			confirmAudioSession(audio);
 		}
 
-		const best = getBestAudioCandidate();
+		forceSpeed(audio);
+		updateUI();
+	}
 
-		if (best) {
-			currentAudio = best;
+	function handleAudioWaiting(audio) {
+		if (audio === currentAudio && audio.currentTime <= 0) {
+			isAudioLoading = true;
+			updateUI();
 		}
 	}
 
-	function startWatchdog() {
-		if (watchdogTimer) return;
+	function handleAudioPause(audio) {
+		if (audio !== currentAudio) return;
 
-		watchdogTimer = window.setInterval(() => {
-			const audio = refreshCurrentAudioIfNeeded();
-
-			if (audio) {
-				forceSpeed(audio);
-			}
-
-			updateUI();
-		}, WATCHDOG_INTERVAL_MS);
+		updateUI();
 	}
 
-	/**************************************************************************
-	 * Native audio events
-	 **************************************************************************/
+	function handleAudioEnded(audio) {
+		if (audio !== currentAudio) return;
 
-	document.addEventListener(
-		"play",
-		(event) => {
-			if (!isRealAudio(event.target)) return;
+		clearAudioSession();
+		updateUI();
+	}
 
-			const wasAcceptedSession =
-				activeAudioSession &&
-				currentAudio === event.target &&
-				hasSeenPlayableAudio;
+	function handleAudioRateChange(audio) {
+		if (!currentAudio && !isReadAloudAudioExpected()) {
+			return;
+		}
 
-			audioDebugPlayStartedAt = Date.now();
-			audioDebugLoggedProgress = false;
-			currentAudio = event.target;
-			hasSeenPlayableAudio = wasAcceptedSession;
 
-			// Full scan on play, because ChatGPT may create/swap audio elements here.
-			forceSpeedOnAllAudio();
-			forceSpeed(currentAudio);
+		forceSpeed(audio);
 
-			if (wasAcceptedSession) {
-				activeAudioSession = true;
-				isAudioLoading = currentAudio.currentTime <= 0;
-			} else if (isReadAloudAudioExpected()) {
-				activeAudioSession = true;
-				isAudioLoading = true;
-			} else {
-				activeAudioSession = false;
-				isAudioLoading = false;
-			}
+		updateUI();
+	}
 
-			startProvisionalAudioTimer(currentAudio);
-			debugAudioSession("play", currentAudio, {
-				target: event.target,
-				wasAcceptedSession,
-			});
-			updateUI();
-
-			log("audio play detected", currentAudio);
-		},
-		true,
-	);
-
-	document.addEventListener(
-		"playing",
-		(event) => {
-			if (!isRealAudio(event.target)) return;
-
-			if (event.target === currentAudio) {
-				debugAudioSession("playing", event.target, { target: event.target });
-				confirmAudioSession(event.target);
-				updateUI();
-			}
-		},
-		true,
-	);
-
-	document.addEventListener(
-		"timeupdate",
-		(event) => {
-			if (!isRealAudio(event.target)) return;
-
-			if (event.target === currentAudio) {
-				if (currentAudio.currentTime > 0) {
-					if (!audioDebugLoggedProgress) {
-						audioDebugLoggedProgress = true;
-						debugAudioSession("timeupdate progress", event.target, {
-							target: event.target,
-						});
-					}
-
-					confirmAudioSession(event.target);
-				}
-
-				forceSpeed(currentAudio);
-				updateUI();
-			}
-		},
-		true,
-	);
-
-	document.addEventListener(
-		"waiting",
-		(event) => {
-			if (!isRealAudio(event.target)) return;
-
-			if (
-				event.target === currentAudio &&
-				activeAudioSession &&
-				currentAudio.currentTime <= 0
-			) {
-				debugAudioSession("waiting", event.target, { target: event.target });
-				isAudioLoading = true;
-				updateUI();
-			}
-		},
-		true,
-	);
-
-	document.addEventListener(
-		"pause",
-		(event) => {
-			if (!isRealAudio(event.target)) return;
-
-			if (event.target === currentAudio) {
-				debugAudioSession("pause", event.target, { target: event.target });
-				updateUI();
-			}
-		},
-		true,
-	);
-
-	document.addEventListener(
-		"ended",
-		(event) => {
-			if (!isRealAudio(event.target)) return;
-
-			if (event.target === currentAudio) {
-				debugAudioSession("ended", event.target, { target: event.target });
-				clearAudioSession();
-				updateUI();
-			}
-		},
-		true,
-	);
-
-	document.addEventListener(
-		"ratechange",
-		(event) => {
-			if (!isRealAudio(event.target)) return;
-
-			if (ignoreRateChange) {
-				ignoreRateChange = false;
-				return;
-			}
-
-			// Full scan on ratechange, because this is exactly when ChatGPT may be fighting us.
-			forceSpeedOnAllAudio();
-			forceSpeed(event.target);
-
-			updateUI();
-		},
-		true,
-	);
 
 	/**************************************************************************
 	 * Play / pause
 	 **************************************************************************/
 
-	function ensureCurrentAudio() {
-		const audio = refreshCurrentAudioIfNeeded();
-
-		if (audio) {
-			currentAudio = audio;
-			return currentAudio;
-		}
-
-		return null;
-	}
 
 	function togglePlayPause() {
-		const audio = ensureCurrentAudio();
+		const audio = currentAudio;
 
 		if (!audio) {
 			updateUI();
@@ -711,9 +547,7 @@
 	}
 
 	function setupKeyboardShortcuts() {
-		if (keyboardShortcutsInstalled) return;
 
-		keyboardShortcutsInstalled = true;
 
 		document.addEventListener(
 			"keydown",
@@ -722,7 +556,7 @@
 				if (event.ctrlKey || event.altKey || event.metaKey) return;
 				if (isTypingTarget(event.target)) return;
 
-				const audio = refreshCurrentAudioIfNeeded();
+				const audio = currentAudio;
 
 				if (!audio || audio.ended) return;
 
@@ -739,30 +573,19 @@
 	 * Auto Read Aloud
 	 **************************************************************************/
 
-	const READ_SELECTORS = [
-		'[data-testid="voice-play-turn-action-button"]',
-		'[role="menuitem"][aria-label="Read aloud"]',
-		'[role="menuitem"][aria-label="朗读"]',
-		'button[aria-label="Read aloud"]',
-		'button[aria-label="朗读"]',
-	];
+	const READ_SELECTOR =
+		'[role="menuitem"][data-testid="voice-play-turn-action-button"]';
+	const MORE_ACTIONS_SELECTOR = 'button[aria-label="More actions"]';
 
 	function getReadAloudControl(target) {
 		if (!(target instanceof Element)) return null;
 
-		for (const selector of READ_SELECTORS) {
-			const el = target.closest(selector);
-
-			if (el && isVisible(el)) return el;
-		}
-
-		return null;
+		const el = target.closest(READ_SELECTOR);
+		return el && isVisible(el) ? el : null;
 	}
 
 	function setupReadAloudClickExpectation() {
-		if (readAloudClickListenerInstalled) return;
 
-		readAloudClickListenerInstalled = true;
 
 		document.addEventListener(
 			"click",
@@ -775,112 +598,11 @@
 		);
 	}
 
-	function simulateClick(el) {
-		const rect = el.getBoundingClientRect();
-		const cx = Math.round((rect.left + rect.right) / 2);
-		const cy = Math.round((rect.top + rect.bottom) / 2);
-
-		const shared = {
-			bubbles: true,
-			cancelable: true,
-			clientX: cx,
-			clientY: cy,
-		};
-
-		const pointer = {
-			...shared,
-			pointerId: 1,
-			pointerType: "mouse",
-			isPrimary: true,
-		};
-
-		const events = [
-			[PointerEvent, { ...pointer, type: "pointerover", pressure: 0 }],
-			[
-				PointerEvent,
-				{ ...pointer, type: "pointerenter", pressure: 0, bubbles: false },
-			],
-			[PointerEvent, { ...pointer, type: "pointermove", pressure: 0 }],
-			[
-				PointerEvent,
-				{
-					...pointer,
-					type: "pointerdown",
-					pressure: 0.5,
-					button: 0,
-					buttons: 1,
-				},
-			],
-			[MouseEvent, { ...shared, type: "mouseover" }],
-			[MouseEvent, { ...shared, type: "mouseenter", bubbles: false }],
-			[MouseEvent, { ...shared, type: "mousemove" }],
-			[MouseEvent, { ...shared, type: "mousedown", button: 0, buttons: 1 }],
-			[PointerEvent, { ...pointer, type: "pointerup", pressure: 0, button: 0 }],
-			[MouseEvent, { ...shared, type: "mouseup", button: 0 }],
-			[MouseEvent, { ...shared, type: "click", button: 0 }],
-		];
-
-		for (const [EventClass, opts] of events) {
-			const { type, ...rest } = opts;
-			el.dispatchEvent(new EventClass(type, rest));
-		}
-	}
-
-	function dismissMenu() {
-		const shared = {
-			bubbles: true,
-			cancelable: true,
-			clientX: 10,
-			clientY: 10,
-		};
-
-		document.body.dispatchEvent(
-			new PointerEvent("pointerdown", {
-				...shared,
-				pointerId: 1,
-				pointerType: "mouse",
-				isPrimary: true,
-			}),
-		);
-
-		document.body.dispatchEvent(new MouseEvent("mousedown", shared));
-		document.body.dispatchEvent(new MouseEvent("click", shared));
-		document.dispatchEvent(
-			new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-		);
-	}
-
-	function tryClickReadAloud() {
-		for (const selector of READ_SELECTORS) {
-			const el = document.querySelector(selector);
-
-			if (el && isVisible(el)) {
-				log("auto read click", selector);
-				expectReadAloudAudio();
-				el.click();
-				return true;
-			}
-		}
-
-		return false;
-	}
-
 	async function triggerReadAloud(msgEl) {
 		if (!msgEl) return;
 
-		msgEl.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-		await sleep(500);
-
-		if (tryClickReadAloud()) return;
-
-		const root =
-			msgEl.closest('[data-testid^="conversation-turn"]') ||
-			msgEl.closest("article") ||
-			msgEl.parentElement;
-
-		const moreButton =
-			root?.querySelector('button[aria-label="More actions"]') ||
-			root?.querySelector('button[aria-label*="More" i]');
+		const root = msgEl.closest('[data-testid^="conversation-turn"]');
+		const moreButton = root?.querySelector(MORE_ACTIONS_SELECTOR);
 
 		if (!moreButton || !isVisible(moreButton)) {
 			isAudioLoading = false;
@@ -889,38 +611,40 @@
 			return;
 		}
 
-		simulateClick(moreButton);
+		const rect = moreButton.getBoundingClientRect();
+		moreButton.dispatchEvent(
+			new PointerEvent("pointerdown", {
+				bubbles: true,
+				cancelable: true,
+				clientX: Math.round((rect.left + rect.right) / 2),
+				clientY: Math.round((rect.top + rect.bottom) / 2),
+				pointerId: 1,
+				pointerType: "mouse",
+				isPrimary: true,
+				button: 0,
+				buttons: 1,
+				pressure: 0.5,
+			}),
+		);
 
 		for (let i = 0; i < 5; i++) {
 			await sleep(300);
 
-			if (
-				READ_SELECTORS.some((selector) =>
-					isVisible(document.querySelector(selector)),
-				)
-			) {
-				break;
+			const readAloud = document.querySelector(READ_SELECTOR);
+			if (readAloud && isVisible(readAloud)) {
+				expectReadAloudAudio();
+				readAloud.click();
+				return;
 			}
 		}
 
-		const clicked = tryClickReadAloud();
-
-		await sleep(150);
-		dismissMenu();
-
-		if (!clicked) {
-			isAudioLoading = false;
-			updateUI();
-			log('auto read: "Read aloud" not found in menu');
-		}
+		isAudioLoading = false;
+		updateUI();
+		log('auto read: "Read aloud" menu item not found');
 	}
 
 	function isStreaming() {
-		return Boolean(
-			document.querySelector(
-				'[data-testid="stop-button"], button[aria-label*="Stop"], button[aria-label*="停止生成"]',
-			),
-		);
+		return Boolean(document.querySelector('[data-testid="stop-button"]'));
 	}
 
 	function getLastAssistantMsg() {
@@ -931,9 +655,7 @@
 	}
 
 	function getMsgId(el) {
-		return (
-			el.getAttribute("data-message-id") || (el.innerText || "").slice(0, 80)
-		);
+		return el.getAttribute("data-message-id");
 	}
 
 	function onNewMessage(msgEl) {
@@ -952,29 +674,25 @@
 				return;
 			}
 
-			waitTimer = setTimeout(async () => {
-				if (!isAutoReadEnabled) return;
+			waitTimer = null;
+			const id = getMsgId(msgEl);
 
-				const id = getMsgId(msgEl);
+			if (id === lastReadMsgId) return;
 
-				if (id === lastReadMsgId) return;
-
-				lastReadMsgId = id;
-
-				await triggerReadAloud(msgEl);
-			}, READ_DELAY);
+			lastReadMsgId = id;
+			triggerReadAloud(msgEl);
 		};
 
 		poll();
 	}
 
 	function setupAutoReadObserver() {
-		if (autoReadObserver || !document.body) return;
+		if (!document.body) return;
 
 		const lastMsg = getLastAssistantMsg();
 		let lastMsgId = lastMsg ? getMsgId(lastMsg) : null;
 
-		autoReadObserver = new MutationObserver(() => {
+		const autoReadObserver = new MutationObserver(() => {
 			const currentMsg = getLastAssistantMsg();
 			const currentMsgId = currentMsg ? getMsgId(currentMsg) : null;
 
@@ -993,12 +711,15 @@
 	}
 
 	function setupRouteObserver() {
-		if (routeObserver) return;
 
-		routeObserver = new MutationObserver(() => {
+		const routeObserver = new MutationObserver(() => {
 			if (location.href === lastUrl) return;
 
 			lastUrl = location.href;
+			if (waitTimer) {
+				clearTimeout(waitTimer);
+				waitTimer = null;
+			}
 			lastReadMsgId = null;
 			clearAudioSession();
 
@@ -1042,17 +763,12 @@
 	 **************************************************************************/
 
 	function getPlayerState(audio) {
-		if (!activeAudioSession || !audio) return "idle";
-		if (audio.ended) return "ended";
+		if (!audio || audio.ended) return "idle";
 		if (isAudioLoading) return "loading";
-		if (!hasSeenPlayableAudio) return "idle";
 		if (audio.paused) return "paused";
 		return "playing";
 	}
 
-	function shouldShowPlayer(state) {
-		return state === "loading" || state === "playing" || state === "paused";
-	}
 
 	/**************************************************************************
 	 * UI
@@ -1137,22 +853,12 @@
 
 		const audio = currentAudio;
 		const state = getPlayerState(audio);
-		const visible = shouldShowPlayer(state);
-		const debugUiState = `${state}:${visible ? "visible" : "hidden"}`;
-
-		if (debugUiState !== lastDebugUiState) {
-			lastDebugUiState = debugUiState;
-			debugAudioSession("updateUI visibility", audio, {
-				state,
-				visible,
-			});
-		}
+		const visible = state !== "idle";
 
 		updateVoiceBarsState(state);
 		setVisibleKeepSpace(playerGroup, visible);
 
 		if (!visible) {
-			stopLoadingDots();
 
 			playPauseButton.disabled = true;
 			playPauseButton.textContent = "▶";
@@ -1162,13 +868,11 @@
 
 		if (state === "loading") {
 			playPauseButton.disabled = true;
-			playPauseButton.textContent = ".".repeat(loadingDotsCount);
+			playPauseButton.textContent = "...";
 			playPauseButton.title = "Loading Read Aloud audio";
-			startLoadingDots();
 			return;
 		}
 
-		stopLoadingDots();
 
 		if (state === "paused") {
 			playPauseButton.disabled = false;
@@ -1210,6 +914,9 @@
             max-width: 460px;
             font-size: 14px;
             align-self: flex-start;
+            position: relative;
+            z-index: 100;
+            pointer-events: auto;
         `;
 
 		playerGroup = document.createElement("div");
@@ -1291,18 +998,16 @@
 		updateAutoReadButton();
 		updateUI();
 	}
-
 	/**************************************************************************
 	 * DOM
 	 **************************************************************************/
 
 	function watchDOM() {
-		if (observer || !document.body) return;
+		if (!document.body) return;
 
-		observer = new MutationObserver(() => {
+		const observer = new MutationObserver(() => {
 			if (!document.getElementById(UI_ID)) {
 				createUI();
-				updateAutoReadButton();
 			}
 		});
 
@@ -1311,6 +1016,7 @@
 			subtree: true,
 		});
 	}
+
 
 	/**************************************************************************
 	 * Init
@@ -1325,15 +1031,14 @@
 		setupReadAloudClickExpectation();
 		setupKeyboardShortcuts();
 
-		startWatchdog();
 
-		forceSpeedOnAllAudio();
 		updateDisplay();
 		updateAutoReadButton();
 		updateUI();
 	}
 
 	function init() {
+		installAudioPlayHook();
 		loadSpeed();
 		loadVolumeBoost();
 		loadAutoReadState();
