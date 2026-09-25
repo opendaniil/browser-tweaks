@@ -1,7 +1,7 @@
 /* ==UserStyle==
 @name           ChatGPT Theme
 @namespace      github.com/opendaniil/browser-tweaks
-@version        1.0.1
+@version        1.1.0
 @description    ChatGPT layout and surfaces: right sidebar, softer dark background, transparent bubbles, and blurred composer.
 @author         opendaniil
 @license        MIT
@@ -12,41 +12,68 @@
 ==/UserStyle== */
 
 @-moz-document domain("chatgpt.com") {
-	/**************************************************************************
-	 * Layout
-	 **************************************************************************/
+    :root[data-theme="dark"], [data-theme="dark"] {
+        --sidebar-bg: #272a36;
+        --app-color-background-surface: var(--sidebar-bg) !important;
+    }
 
-	#stage-slideover-sidebar {
-		order: 2;
-	}
+    /**************************************************************************
+     * Sidebar layout
+     **************************************************************************/
 
-	#sidebar-header {
-		flex-direction: row-reverse;
-	}
+    [data-app-shell-workspace-row="true"]
+        > aside[data-app-shell-left-panel-appearance] {
+        order: 2;
+    }
 
-	/**************************************************************************
-	 * Surface theme
-	 **************************************************************************/
+    #app-shell-sidebar
+        > div:has(> [data-app-navigation-rail="true"]) {
+        flex-direction: row-reverse !important;
+    }
 
-	.dark {
-		--black: #272a36 !important;
-		--bg-secondary-surface: #272a36 !important;
-	}
+    /**************************************************************************
+     * Sidebar background
+     **************************************************************************/
 
-	[data-writing-block="true"],
-	.bg-token-bg-elevated-secondary,
-	[data-testid="writing-block-header-surface"],
-	.user-message-bubble-color {
-		background-color: transparent;
-	}
+    aside[data-app-shell-left-panel-appearance],
+    aside[data-app-shell-left-panel-appearance] > div,
+    #app-shell-sidebar,
+    #app-shell-sidebar > div {
+        background: var(--sidebar-bg) !important;
+    }
 
-	.composer-submit-button-color {
-		background-color: gray;
-	}
 
-	[data-composer-surface="true"] {
-		backdrop-filter: blur(4px) !important;
-		background-color: transparent;
-		box-shadow: none !important;
-	}
+    /**************************************************************************
+     * User messages
+     **************************************************************************/
+
+    :root[data-theme="dark"] {
+        --color-background-user-message: transparent !important;
+    }
+
+    .user-message-bubble-color {
+        background: transparent !important;
+    }
+
+    /**************************************************************************
+     * Composer
+     **************************************************************************/
+
+    [data-composer-surface-variant],
+    [data-composer-dark] {
+        background: transparent !important;
+    }
+
+    [data-composer-body] button[type="submit"] {
+        background: gray !important;
+    }
+
+    button[aria-label="Start Voice"] {
+        background: gray !important;
+    }
+
+    button[aria-label="Start Voice"],
+    button[aria-label="Transcribe and send"] {
+        background: #6b7280 !important;
+    }
 }
