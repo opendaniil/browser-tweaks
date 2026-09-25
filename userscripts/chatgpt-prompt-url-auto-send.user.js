@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         ChatGPT Prompt URL Auto-Send
-// @version      1.1.4
+// @version      1.2.0
 // @description  Auto-clicks Send when ChatGPT URL has ?q= or ?prompt=.
 // @icon         https://chatgpt.com/favicon.ico
 // @match        https://chatgpt.com/*
@@ -15,152 +15,255 @@
 // ==/UserScript==
 
 (() => {
-	const initialHref = location.href;
-	const initialUrl = new URL(initialHref);
+    const initialHref = location.href;
+    const initialUrl = new URL(initialHref);
 
-	const hasInitialPromptParam =
-		initialUrl.searchParams.has("q") || initialUrl.searchParams.has("prompt");
+    const hasInitialPromptParam =
+        initialUrl.searchParams.has("q") ||
+        initialUrl.searchParams.has("prompt");
 
-	if (!hasInitialPromptParam) return;
+    if (!hasInitialPromptParam) return;
 
-	const SEND_READY_SELECTOR =
-		'#composer-submit-button[aria-label="Send prompt"]';
 
-	const CHECK_EVERY_MS = 250;
-	const CLICK_DELAY_MS = 500;
-	const VERIFY_DELAY_MS = 1000;
-	const TIMEOUT_MS = 15000;
+    /**************************************************************************
+     * Configuration
+     **************************************************************************/
 
-	let observer = null;
-	let interval = null;
-	let timeout = null;
-	let clickDelayTimer = null;
-	let verifyTimer = null;
-	let done = false;
-	let clicking = false;
+    const SEND_BUTTON_SELECTOR =
+        'button[type="submit"][aria-label="Send"]';
 
-	function currentUrlHasPromptParam() {
-		const url = new URL(location.href);
+    const CHECK_EVERY_MS = 250;
+    const CLICK_DELAY_MS = 500;
+    const VERIFY_DELAY_MS = 1000;
+    const TIMEOUT_MS = 15000;
 
-		return url.searchParams.has("q") || url.searchParams.has("prompt");
-	}
 
-	function urlChangedAwayFromPrompt() {
-		return location.href !== initialHref && !currentUrlHasPromptParam();
-	}
+    /**************************************************************************
+     * State
+     **************************************************************************/
 
-	function cleanup() {
-		if (done) return;
-		done = true;
+    let observer = null;
+    let interval = null;
+    let timeout = null;
+    let bodyWait = null;
 
-		observer?.disconnect();
+    let clickDelayTimer = null;
+    let verifyTimer = null;
 
-		clearInterval(interval);
-		clearTimeout(timeout);
-		clearTimeout(clickDelayTimer);
-		clearTimeout(verifyTimer);
+    let done = false;
+    let clicking = false;
 
-		window.removeEventListener("popstate", onUrlMaybeChanged, true);
-	}
 
-	function onUrlMaybeChanged() {
-		if (urlChangedAwayFromPrompt()) {
-			cleanup();
-		}
-	}
+    /**************************************************************************
+     * URL state
+     **************************************************************************/
 
-	function patchHistoryMethod(name) {
-		const original = history[name];
+    function currentUrlHasPromptParam() {
+        const url = new URL(location.href);
 
-		history[name] = function (...args) {
-			const result = original.apply(this, args);
+        return (
+            url.searchParams.has("q") ||
+            url.searchParams.has("prompt")
+        );
+    }
 
-			queueMicrotask(onUrlMaybeChanged);
+    function urlChangedAwayFromPrompt() {
+        return (
+            location.href !== initialHref &&
+            !currentUrlHasPromptParam()
+        );
+    }
 
-			return result;
-		};
-	}
 
-	patchHistoryMethod("pushState");
-	patchHistoryMethod("replaceState");
-	window.addEventListener("popstate", onUrlMaybeChanged, true);
+    /**************************************************************************
+     * Cleanup
+     **************************************************************************/
 
-	function tryClick() {
-		if (done || clicking) return;
+    function cleanup() {
+        if (done) return;
 
-		if (urlChangedAwayFromPrompt()) {
-			cleanup();
-			return;
-		}
+        done = true;
 
-		const button = document.querySelector(SEND_READY_SELECTOR);
-		if (!button) return;
+        observer?.disconnect();
 
-		clicking = true;
+        clearInterval(interval);
+        clearInterval(bodyWait);
 
-		clickDelayTimer = setTimeout(() => {
-			if (done) return;
+        clearTimeout(timeout);
+        clearTimeout(clickDelayTimer);
+        clearTimeout(verifyTimer);
 
-			if (urlChangedAwayFromPrompt()) {
-				cleanup();
-				return;
-			}
+        window.removeEventListener(
+            "popstate",
+            onUrlMaybeChanged,
+            true,
+        );
+    }
 
-			if (
-				!button.isConnected ||
-				button.disabled ||
-				button.getAttribute("aria-disabled") === "true" ||
-				button.getAttribute("aria-label") !== "Send prompt"
-			) {
-				clicking = false;
-				return;
-			}
 
-			button.click();
+    /**************************************************************************
+     * Navigation tracking
+     **************************************************************************/
 
-			verifyTimer = setTimeout(() => {
-				if (done) return;
+    function onUrlMaybeChanged() {
+        if (urlChangedAwayFromPrompt()) {
+            cleanup();
+        }
+    }
 
-				if (urlChangedAwayFromPrompt()) {
-					cleanup();
-					return;
-				}
+    function patchHistoryMethod(name) {
+        const original = history[name];
 
-				const stillReady = document.querySelector(SEND_READY_SELECTOR);
+        history[name] = function (...args) {
+            const result = original.apply(this, args);
 
-				if (!stillReady) {
-					cleanup();
-					return;
-				}
+            queueMicrotask(onUrlMaybeChanged);
 
-				clicking = false;
-			}, VERIFY_DELAY_MS);
-		}, CLICK_DELAY_MS);
-	}
+            return result;
+        };
+    }
 
-	function start() {
-		observer = new MutationObserver(tryClick);
+    patchHistoryMethod("pushState");
+    patchHistoryMethod("replaceState");
 
-		observer.observe(document.body, {
-			childList: true,
-			subtree: true,
-			attributes: true,
-		});
+    window.addEventListener(
+        "popstate",
+        onUrlMaybeChanged,
+        true,
+    );
 
-		interval = setInterval(tryClick, CHECK_EVERY_MS);
-		timeout = setTimeout(cleanup, TIMEOUT_MS);
 
-		tryClick();
-	}
+    /**************************************************************************
+     * Send button
+     **************************************************************************/
 
-	if (document.body) {
-		start();
-	} else {
-		const bodyWait = setInterval(() => {
-			if (!document.body) return;
+    function findSendButton() {
+        const button = document.querySelector(
+            SEND_BUTTON_SELECTOR,
+        );
 
-			clearInterval(bodyWait);
-			start();
-		}, 20);
-	}
+        return button instanceof HTMLButtonElement
+            ? button
+            : null;
+    }
+
+    function buttonIsReady(button) {
+        return (
+            button.isConnected &&
+            !button.disabled &&
+            button.getAttribute("aria-disabled") !== "true" &&
+            button.matches(SEND_BUTTON_SELECTOR)
+        );
+    }
+
+
+    /**************************************************************************
+     * Auto-send
+     **************************************************************************/
+
+    function tryClick() {
+        if (done || clicking) return;
+
+        if (urlChangedAwayFromPrompt()) {
+            cleanup();
+            return;
+        }
+
+        const button = findSendButton();
+
+        if (!button) return;
+
+        clicking = true;
+
+        clickDelayTimer = setTimeout(() => {
+            if (done) return;
+
+            if (urlChangedAwayFromPrompt()) {
+                cleanup();
+                return;
+            }
+
+            if (!buttonIsReady(button)) {
+                clicking = false;
+                return;
+            }
+
+            button.click();
+
+            verifyTimer = setTimeout(() => {
+                if (done) return;
+
+                if (urlChangedAwayFromPrompt()) {
+                    cleanup();
+                    return;
+                }
+
+                const stillReady =
+                    findSendButton();
+
+                if (!stillReady) {
+                    cleanup();
+                    return;
+                }
+
+                clicking = false;
+            }, VERIFY_DELAY_MS);
+        }, CLICK_DELAY_MS);
+    }
+
+
+    /**************************************************************************
+     * DOM observer
+     **************************************************************************/
+
+    function start() {
+        if (done) return;
+
+        observer = new MutationObserver(
+            tryClick,
+        );
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: [
+                "aria-label",
+                "aria-disabled",
+                "disabled",
+                "type",
+            ],
+        });
+
+        interval = setInterval(
+            tryClick,
+            CHECK_EVERY_MS,
+        );
+
+        timeout = setTimeout(
+            cleanup,
+            TIMEOUT_MS,
+        );
+
+        tryClick();
+    }
+
+
+    /**************************************************************************
+     * Start
+     **************************************************************************/
+
+    if (document.body) {
+        start();
+        return;
+    }
+
+    bodyWait = setInterval(() => {
+        if (!document.body) return;
+
+        clearInterval(bodyWait);
+        bodyWait = null;
+
+        start();
+    }, 20);
 })();
